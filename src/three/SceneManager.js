@@ -1,371 +1,307 @@
 import * as THREE from 'three';
 
 /**
- * Single persistent WebGL scene for the whole page.
- * One Points system morphs between a scattered "athlete cloud" and a top-down
- * "field" layout; a denser subset forms the hero "player". Camera keyframes and
- * visual state are driven by global scroll progress (0..1) + per-act progress.
- *
- * Everything is procedural — no external assets required.
+ * iSCOUT — football stadium scene (the visual protagonist).
+ * A single 3D pitch inside a stadium; the camera travels through it as the user
+ * scrolls, telling VÍDEO → VISÃO → DADOS → DECISÃO. Everything is procedural
+ * (canvas-drawn pitch texture, instanced crowd/players) — no external assets.
  */
 
-const COLORS = {
-  navy: new THREE.Color('#04101f'),
-  dim: new THREE.Color('#25506f'),
-  cyan: new THREE.Color('#47c6ff'),
-  lime: new THREE.Color('#a8db37'),
-  white: new THREE.Color('#eaf6ff'),
-  blue: new THREE.Color('#3d6bff'),
-};
+const PITCH_W = 105; // x
+const PITCH_H = 68;  // z
 
-const vertexShader = /* glsl */ `
-  attribute vec3 cloudPos;
-  attribute vec3 fieldPos;
-  attribute vec3 pColor;
-  attribute float pSize;
-  attribute float highlight;   // 0..1 detected/highlighted
-  attribute float seed;
-  uniform float uMorph;        // 0 cloud -> 1 field
-  uniform float uTime;
-  uniform float uReveal;       // global fade-in
-  uniform float uVisible;      // 0..1 fraction visible (matching filter)
-  uniform float uPixelRatio;
-  varying vec3 vColor;
-  varying float vAlpha;
-  varying float vHi;
-
-  void main() {
-    vec3 pos = mix(cloudPos, fieldPos, uMorph);
-    // subtle idle drift
-    pos.x += sin(uTime * 0.3 + seed * 6.2831) * 0.05 * (1.0 - uMorph);
-    pos.y += cos(uTime * 0.25 + seed * 6.2831) * 0.05 * (1.0 - uMorph);
-
-    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-    gl_Position = projectionMatrix * mv;
-
-    float base = pSize * (210.0 / -mv.z) * uPixelRatio;
-    gl_PointSize = clamp(base * (0.7 + highlight * 0.5), 0.0, 26.0);
-
-    vColor = pColor;
-    vHi = highlight;
-    // filter: hide points whose seed exceeds visible fraction (keep highlighted)
-    float keep = step(seed, uVisible);
-    keep = max(keep, highlight);
-    // depth fade so distant points melt into the background instead of stacking white
-    float depthFade = smoothstep(-42.0, -6.0, mv.z);
-    vAlpha = uReveal * keep * (0.10 + highlight * 0.34) * depthFade;
+// ---------- canvas-drawn pitch (grass stripes + full markings) ----------
+function makePitchTexture() {
+  const W = 2048, H = Math.round(2048 * (PITCH_H / PITCH_W));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  // mown stripes
+  const stripes = 18, sw = W / stripes;
+  for (let i = 0; i < stripes; i++) {
+    x.fillStyle = i % 2 ? '#268a4b' : '#2f9c56';
+    x.fillRect(i * sw, 0, sw, H);
   }
-`;
+  // markings
+  const m = W * 0.045;               // outer margin
+  const lw = Math.max(3, W * 0.0028);
+  x.strokeStyle = 'rgba(255,255,255,.85)'; x.lineWidth = lw; x.fillStyle = 'rgba(255,255,255,.85)';
+  const L = m, R = W - m, T = m, B = H - m, MX = W / 2, MY = H / 2;
+  x.strokeRect(L, T, R - L, B - T);                       // boundary
+  x.beginPath(); x.moveTo(MX, T); x.lineTo(MX, B); x.stroke(); // halfway
+  const cr = (B - T) * 0.15;
+  x.beginPath(); x.arc(MX, MY, cr, 0, Math.PI * 2); x.stroke(); // center circle
+  x.beginPath(); x.arc(MX, MY, lw * 1.6, 0, Math.PI * 2); x.fill(); // center spot
+  // penalty + goal boxes both ends
+  const paH = (B - T) * 0.6, paW = (R - L) * 0.16;
+  const gaH = (B - T) * 0.3, gaW = (R - L) * 0.06;
+  [[L, 1], [R, -1]].forEach(([ex, dir]) => {
+    x.strokeRect(ex, MY - paH / 2, paW * dir, paH);       // penalty area
+    x.strokeRect(ex, MY - gaH / 2, gaW * dir, gaH);       // goal area
+    const spot = ex + dir * paW * 0.66;
+    x.beginPath(); x.arc(spot, MY, lw * 1.4, 0, Math.PI * 2); x.fill(); // penalty spot
+    x.beginPath(); x.arc(spot, MY, cr * 0.9, -Math.PI * 0.42 * dir + (dir < 0 ? Math.PI : 0), Math.PI * 0.42 * dir + (dir < 0 ? Math.PI : 0)); x.stroke(); // arc (approx)
+  });
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
-const fragmentShader = /* glsl */ `
-  precision mediump float;
-  varying vec3 vColor;
-  varying float vAlpha;
-  varying float vHi;
-  void main() {
-    vec2 uv = gl_PointCoord - 0.5;
-    float d = length(uv);
-    if (d > 0.5) discard;
-    float core = smoothstep(0.5, 0.0, d);
-    float glow = pow(core, 2.2);
-    vec3 col = vColor + vHi * 0.25;
-    gl_FragColor = vec4(col, glow * vAlpha);
-  }
-`;
-
-// ---- humanoid-ish point distribution for the "player" ----
-function humanoidPoint(i, n) {
-  // returns a point roughly within a standing figure silhouette
-  const t = Math.random();
-  const r = Math.random();
-  const a = Math.random() * Math.PI * 2;
-  let x, y, z;
-  if (t < 0.14) { // head
-    y = 1.55 + r * 0.28; const rr = 0.16 * Math.sqrt(r);
-    x = Math.cos(a) * rr; z = Math.sin(a) * rr;
-  } else if (t < 0.55) { // torso
-    y = 0.55 + Math.random() * 0.95; const rr = 0.26 * (0.6 + 0.4 * Math.random());
-    x = Math.cos(a) * rr * 0.9; z = Math.sin(a) * rr * 0.5;
-  } else if (t < 0.78) { // legs
-    const leg = Math.random() < 0.5 ? -1 : 1;
-    y = Math.random() * 0.95; x = leg * 0.12 + (Math.random() - 0.5) * 0.14;
-    z = (Math.random() - 0.5) * 0.16;
-  } else { // arms
-    const arm = Math.random() < 0.5 ? -1 : 1;
-    y = 0.85 + Math.random() * 0.7; x = arm * (0.28 + Math.random() * 0.22);
-    z = (Math.random() - 0.5) * 0.16;
-  }
-  return new THREE.Vector3(x, y, z);
+function makeBallTexture() {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d');
+  x.fillStyle = '#f4f7f6'; x.fillRect(0, 0, S, S);
+  // scattered black pentagons (stylized)
+  x.fillStyle = '#0b1c30';
+  const pts = [[.5, .18], [.2, .4], [.8, .4], [.35, .72], [.68, .72], [.5, .5]];
+  pts.forEach(([px, py]) => {
+    const cx = px * S, cy = py * S, r = S * 0.085;
+    x.beginPath();
+    for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * (Math.PI * 2 / 5); const xx = cx + Math.cos(a) * r, yy = cy + Math.sin(a) * r; i ? x.lineTo(xx, yy) : x.moveTo(xx, yy); }
+    x.closePath(); x.fill();
+  });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
 export default class SceneManager {
   constructor(canvas, { reducedMotion = false } = {}) {
-    this.canvas = canvas;
-    this.reducedMotion = reducedMotion;
-    this.state = { progress: 0, acts: {} };
-    this.chapter = 'dark';
-    this._raf = null;
-    this._clock = new THREE.Clock();
+    this.canvas = canvas; this.reducedMotion = reducedMotion;
+    this.state = { progress: 0 };
+    this._raf = null; this._clock = new THREE.Clock();
+    this._mobile = matchMedia('(max-width:820px)').matches;
 
-    this.renderer = new THREE.WebGLRenderer({
-      canvas, antialias: true, alpha: true, powerPreference: 'high-performance',
-    });
-    this.renderer.setClearColor(0x000000, 0);
-    this.dpr = Math.min(window.devicePixelRatio, this._isMobile() ? 1.25 : 1.5);
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
+    this.dpr = Math.min(devicePixelRatio, this._mobile ? 1.25 : 1.5);
     this.renderer.setPixelRatio(this.dpr);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x04101f, 0.03);
+    this.scene.background = new THREE.Color('#04101f');
+    this.scene.fog = new THREE.Fog('#062036', 150, 520);
 
-    this.camera = new THREE.PerspectiveCamera(52, 1, 0.1, 200);
-    this.camera.position.set(0, 1.1, 7);
-    this.camera.lookAt(0, 0.9, 0);
+    this.camera = new THREE.PerspectiveCamera(48, 1, 0.5, 800);
+    this.camera.position.set(0, 5, 78);
 
-    this.count = this._isMobile() ? 900 : 1600;
-    this._buildPoints();
-    this._buildBoundingBox();
+    this._lights();
+    this._pitch();
+    this._stadium();
+    this._players();
+    this._ball();
+    this._overlays();
 
-    this._onResize();
-    window.addEventListener('resize', () => this._onResize());
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) this.pause(); else this.start();
+    this._onResize(); addEventListener('resize', () => this._onResize());
+    document.addEventListener('visibilitychange', () => document.hidden ? this.pause() : this.start());
+  }
+
+  _lights() {
+    this.scene.add(new THREE.HemisphereLight('#9cc4ff', '#0c241a', 0.85));
+    const key = new THREE.DirectionalLight('#f2f9ff', 1.5); key.position.set(50, 100, 40); this.scene.add(key);
+    const fill = new THREE.DirectionalLight('#cfe6ff', 0.7); fill.position.set(0, 50, 90); this.scene.add(fill);
+    const rim = new THREE.DirectionalLight('#47c6ff', 0.6); rim.position.set(-50, 40, -50); this.scene.add(rim);
+  }
+
+  _pitch() {
+    const g = new THREE.PlaneGeometry(PITCH_W, PITCH_H);
+    this.pitchTex = makePitchTexture();
+    const m = new THREE.MeshStandardMaterial({ map: this.pitchTex, roughness: 0.95, metalness: 0 });
+    this.pitch = new THREE.Mesh(g, m); this.pitch.rotation.x = -Math.PI / 2; this.scene.add(this.pitch);
+    // dark ground beyond pitch
+    const gg = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ color: '#061525', roughness: 1 }));
+    gg.rotation.x = -Math.PI / 2; gg.position.y = -0.05; this.scene.add(gg);
+  }
+
+  _stadium() {
+    const g = new THREE.Group(); this.scene.add(g);
+    const standMat = new THREE.MeshStandardMaterial({ color: '#0a1a2e', roughness: 1 });
+    // four raked stands
+    // upright perimeter stands (dark backing; crowd tiers give the raked look)
+    const mk = (w, d, px, pz, rot) => {
+      const s = new THREE.Mesh(new THREE.BoxGeometry(w, 14, d), standMat);
+      s.position.set(px, 5, pz); s.rotation.y = rot; g.add(s); return s;
+    };
+    const near = 14; // inner edge of stand from touchline (kept clear so it never blocks the pitch)
+    mk(PITCH_W + 44, 26, 0, -(PITCH_H / 2 + near + 13), 0);
+    mk(PITCH_W + 44, 26, 0, (PITCH_H / 2 + near + 13), 0);
+    mk(PITCH_H + 24, 26, -(PITCH_W / 2 + near + 13), 0, Math.PI / 2);
+    mk(PITCH_H + 24, 26, (PITCH_W / 2 + near + 13), 0, Math.PI / 2);
+
+    // crowd packed as a rising band on the stands (bright specks)
+    const cN = this._mobile ? 2200 : 5200;
+    const cg = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const cm = new THREE.MeshBasicMaterial({ vertexColors: true });
+    this.crowd = new THREE.InstancedMesh(cg, cm, cN);
+    const o = new THREE.Object3D(); const col = new THREE.Color();
+    const pal = ['#7fa8d8', '#9fc4e6', '#b9c6d8', '#dfe8f2', '#8fd0e6', '#c9d9a8', '#5f89c0'];
+    const HW = PITCH_W / 2, HH = PITCH_H / 2;
+    for (let i = 0; i < cN; i++) {
+      const side = i % 4;
+      const along = (Math.random() - 0.5) * 0.98;
+      const tier = Math.random();               // 0 inner/low → 1 outer/high (raked)
+      const inset = near + 1 + tier * 22;        // distance out from touchline
+      const y = 2 + tier * 13;                   // rise with tier
+      let px, pz;
+      if (side === 0) { px = along * (PITCH_W + 40); pz = -(HH + inset); }
+      else if (side === 1) { px = along * (PITCH_W + 40); pz = (HH + inset); }
+      else if (side === 2) { pz = along * (PITCH_H + 20); px = -(HW + inset); }
+      else { pz = along * (PITCH_H + 20); px = (HW + inset); }
+      o.position.set(px, y, pz); o.updateMatrix();
+      this.crowd.setMatrixAt(i, o.matrix);
+      col.set(pal[(Math.random() * pal.length) | 0]); this.crowd.setColorAt(i, col);
+    }
+    this.crowd.instanceMatrix.needsUpdate = true;
+    if (this.crowd.instanceColor) this.crowd.instanceColor.needsUpdate = true;
+    g.add(this.crowd);
+
+    // floodlight towers + glow
+    this.floods = [];
+    const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+    corners.forEach(([sx, sz]) => {
+      const px = sx * (PITCH_W / 2 + 26), pz = sz * (PITCH_H / 2 + 24);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 34, 8), standMat);
+      pole.position.set(px, 17, pz); g.add(pole);
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 1), new THREE.MeshStandardMaterial({ color: '#0a1a2e', emissive: '#eaf6ff', emissiveIntensity: 1.4 }));
+      panel.position.set(px, 33, pz); panel.lookAt(0, 0, 0); g.add(panel);
+      const light = new THREE.PointLight('#dff0ff', 0.7, 260, 1.4); light.position.set(px, 33, pz); g.add(light);
+      this.floods.push(panel);
     });
   }
 
-  _isMobile() { return window.matchMedia('(max-width: 820px)').matches; }
+  _players() {
+    // two teams as instanced capsules (bodies) + spheres (heads)
+    const positions = [];
+    const form = [ // fractions of half-pitch; will mirror for team B
+      [0.90, 0.0], [0.7, -0.28], [0.7, 0.28], [0.72, -0.62], [0.72, 0.62],
+      [0.45, -0.18], [0.45, 0.18], [0.5, -0.55], [0.5, 0.55], [0.22, -0.3], [0.22, 0.3],
+    ];
+    const half = PITCH_W / 2;
+    form.forEach(([fx, fz]) => positions.push([-fx * half * 0.92, fz * (PITCH_H / 2) * 0.9, 0]));
+    form.forEach(([fx, fz]) => positions.push([fx * half * 0.92, fz * (PITCH_H / 2) * 0.9, 1]));
+    this.playerPos = positions;
+    this.heroIdx = 5; // a highlighted midfielder (team A)
 
-  _buildPoints() {
-    const n = this.count;
-    const cloud = new Float32Array(n * 3);
-    const field = new Float32Array(n * 3);
-    const color = new Float32Array(n * 3);
-    const size = new Float32Array(n);
-    const highlight = new Float32Array(n);
-    const seed = new Float32Array(n);
-
-    const playerCount = Math.floor(n * 0.2); // subset forms the player
-
-    for (let i = 0; i < n; i++) {
-      const isPlayer = i < playerCount;
-      let cx, cy, cz;
-      if (isPlayer) {
-        const p = humanoidPoint(i, playerCount);
-        cx = p.x; cy = p.y; cz = p.z - 0.2;
-      } else {
-        // scattered athlete cloud in a wide volume
-        const radius = 6 + Math.random() * 16;
-        const ang = Math.random() * Math.PI * 2;
-        cx = Math.cos(ang) * radius * (0.5 + Math.random() * 0.6);
-        cy = (Math.random() - 0.3) * 6;
-        cz = -3 - Math.random() * 26;
-      }
-      cloud[i * 3] = cx; cloud[i * 3 + 1] = cy; cloud[i * 3 + 2] = cz;
-
-      // field layout: points spread on a plane (top-down pitch), player near centre
-      let fx, fz;
-      if (isPlayer) { fx = (Math.random() - 0.5) * 5; fz = (Math.random() - 0.5) * 4; }
-      else { fx = (Math.random() - 0.5) * 22; fz = (Math.random() - 0.5) * 13; }
-      field[i * 3] = fx;
-      field[i * 3 + 1] = -0.02 + Math.random() * 0.05;
-      field[i * 3 + 2] = fz;
-
-      // color + highlight: few highlighted in cloud; player mostly bright
-      let hi = 0;
-      if (isPlayer) hi = 0.35 + Math.random() * 0.4;
-      else if (Math.random() < 0.06) hi = 1.0;
-      highlight[i] = hi;
-
-      const base = isPlayer ? COLORS.cyan : (hi > 0.9 ? COLORS.lime : COLORS.dim);
-      const c = base.clone().lerp(COLORS.white, isPlayer ? 0.15 : hi * 0.4);
-      color[i * 3] = c.r; color[i * 3 + 1] = c.g; color[i * 3 + 2] = c.b;
-
-      size[i] = (isPlayer ? 3.4 : 2.2) * (0.55 + Math.random() * 0.7);
-      seed[i] = Math.random();
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(cloud.slice(), 3));
-    geo.setAttribute('cloudPos', new THREE.BufferAttribute(cloud, 3));
-    geo.setAttribute('fieldPos', new THREE.BufferAttribute(field, 3));
-    geo.setAttribute('pColor', new THREE.BufferAttribute(color, 3));
-    geo.setAttribute('pSize', new THREE.BufferAttribute(size, 1));
-    geo.setAttribute('highlight', new THREE.BufferAttribute(highlight, 1));
-    geo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
-
-    this.uniforms = {
-      uMorph: { value: 0 },
-      uTime: { value: 0 },
-      uReveal: { value: 0 },
-      uVisible: { value: 1 },
-      uPixelRatio: { value: this.dpr },
-    };
-    this.pointsMat = new THREE.ShaderMaterial({
-      vertexShader, fragmentShader, uniforms: this.uniforms,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    const N = positions.length;
+    const bodyGeo = new THREE.CapsuleGeometry(0.7, 2.2, 4, 8);
+    const headGeo = new THREE.SphereGeometry(0.62, 12, 12);
+    const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.05 });
+    const headMat = new THREE.MeshStandardMaterial({ roughness: 0.6, color: '#e7c9a0' });
+    this.bodies = new THREE.InstancedMesh(bodyGeo, bodyMat, N);
+    this.heads = new THREE.InstancedMesh(headGeo, headMat, N);
+    const o = new THREE.Object3D(); const col = new THREE.Color();
+    const teamA = new THREE.Color('#f2f5f4'), teamB = new THREE.Color('#122f4d'), hero = new THREE.Color('#47c6ff');
+    positions.forEach((p, i) => {
+      o.position.set(p[0], 2.2, p[1]); o.updateMatrix(); this.bodies.setMatrixAt(i, o.matrix);
+      o.position.set(p[0], 4.2, p[1]); o.updateMatrix(); this.heads.setMatrixAt(i, o.matrix);
+      col.copy(i === this.heroIdx ? hero : (p[2] === 0 ? teamA : teamB)); this.bodies.setColorAt(i, col);
     });
-    this.points = new THREE.Points(geo, this.pointsMat);
-    this.playerCount = playerCount;
-    this.scene.add(this.points);
+    this.bodies.instanceMatrix.needsUpdate = true; this.heads.instanceMatrix.needsUpdate = true;
+    if (this.bodies.instanceColor) this.bodies.instanceColor.needsUpdate = true;
+    this.scene.add(this.bodies); this.scene.add(this.heads);
 
-    // faint field lines (revealed in data act)
-    this.field = this._buildField();
-    this.scene.add(this.field);
+    // tracking box around hero player
+    const hp = positions[this.heroIdx];
+    const box = new THREE.BoxGeometry(3.2, 6, 3.2);
+    this.trackBox = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: '#47c6ff', transparent: true, opacity: 0 }));
+    this.trackBox.position.set(hp[0], 3, hp[1]); this.scene.add(this.trackBox);
+    this.trackHalo = new THREE.Mesh(new THREE.RingGeometry(3.4, 3.7, 40), new THREE.MeshBasicMaterial({ color: '#a8db37', transparent: true, opacity: 0, side: THREE.DoubleSide }));
+    this.trackHalo.rotation.x = -Math.PI / 2; this.trackHalo.position.set(hp[0], 0.15, hp[1]); this.scene.add(this.trackHalo);
   }
 
-  _buildField() {
-    const g = new THREE.Group();
-    const mat = new THREE.LineBasicMaterial({ color: 0x2a6f8f, transparent: true, opacity: 0 });
-    const w = 22, h = 13;
-    const rect = (x, z, rw, rh) => {
-      const pts = [
-        new THREE.Vector3(x - rw / 2, 0, z - rh / 2), new THREE.Vector3(x + rw / 2, 0, z - rh / 2),
-        new THREE.Vector3(x + rw / 2, 0, z + rh / 2), new THREE.Vector3(x - rw / 2, 0, z + rh / 2),
-        new THREE.Vector3(x - rw / 2, 0, z - rh / 2),
-      ];
-      return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
-    };
-    g.add(rect(0, 0, w, h));
-    g.add(rect(0, 0, 3, 6));
-    const mid = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, -h / 2), new THREE.Vector3(0, 0, h / 2),
-    ]), mat);
-    g.add(mid);
-    const circlePts = [];
-    for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2; circlePts.push(new THREE.Vector3(Math.cos(a) * 2, 0, Math.sin(a) * 2)); }
-    const circle = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(circlePts), mat);
-    g.add(circle);
-    this.fieldMat = mat;
-    g.rotation.x = 0; // lies on XZ plane
-    return g;
+  _ball() {
+    this.ballTex = makeBallTexture();
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(1.15, 32, 24), new THREE.MeshStandardMaterial({ map: this.ballTex, roughness: 0.35, metalness: 0.05 }));
+    this.ball.position.set(-half0(), 1.15, 6); this.scene.add(this.ball);
+    function half0() { return PITCH_W * 0.28; }
   }
 
-  _buildBoundingBox() {
-    const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.9, 1.9, 0.9));
-    this.boxMat = new THREE.LineBasicMaterial({ color: 0x47c6ff, transparent: true, opacity: 0 });
-    this.box = new THREE.LineSegments(geo, this.boxMat);
-    this.box.position.set(0, 0.9, -0.2);
-    this.scene.add(this.box);
-
-    // crosshair corners feel — small tick using a second slightly larger box
-    const g2 = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.1, 2.1, 1.1));
-    this.boxMat2 = new THREE.LineBasicMaterial({ color: 0xa8db37, transparent: true, opacity: 0 });
-    this.box2 = new THREE.LineSegments(g2, this.boxMat2);
-    this.box2.position.copy(this.box.position);
-    this.scene.add(this.box2);
-  }
-
-  setChapter(chapter) {
-    this.chapter = chapter;
-    // blending: additive glow reads best on dark; keep additive but lower reveal handled by CSS bg
-    if (this.scene.fog) {
-      this.scene.fog.color.set(chapter === 'light' ? 0xdfe7e4 : 0x04101f);
-      this.scene.fog.density = chapter === 'light' ? 0.03 : 0.02;
+  _overlays() {
+    // data trajectories (revealed in data act)
+    this.trails = new THREE.Group(); this.scene.add(this.trails);
+    this.trailMat = new THREE.LineBasicMaterial({ color: '#47c6ff', transparent: true, opacity: 0 });
+    for (let k = 0; k < 8; k++) {
+      const p0 = this.playerPos[(Math.random() * this.playerPos.length) | 0];
+      const pts = [];
+      let cx = p0[0], cz = p0[1];
+      for (let s = 0; s < 6; s++) { pts.push(new THREE.Vector3(cx, 0.3, cz)); cx += (Math.random() - 0.5) * 18; cz += (Math.random() - 0.5) * 14; }
+      this.trails.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), this.trailMat));
     }
+    // radar ring (matching)
+    this.radar = new THREE.Mesh(new THREE.RingGeometry(1, 1.4, 64), new THREE.MeshBasicMaterial({ color: '#a8db37', transparent: true, opacity: 0, side: THREE.DoubleSide }));
+    this.radar.rotation.x = -Math.PI / 2; this.radar.position.y = 0.2; this.scene.add(this.radar);
   }
 
-  // ---- camera keyframes across global progress ----
-  _cameraFor(p) {
-    // keyframes: [progress, posX, posY, posZ, lookY]
+  // camera keyframes across global progress: [p, px,py,pz, lx,ly,lz]
+  _camFor(p) {
+    const hp = this.playerPos[this.heroIdx];
     const K = [
-      [0.00, 0.9, 1.2, 8.0, 0.9],   // hero — near player
-      [0.16, 0.0, 0.6, 13.0, 0.2],  // problem — travel into cloud
-      [0.34, 0.4, 1.0, 6.0, 0.9],   // pipeline — back to player, detect
-      [0.42, 0.5, 1.1, 4.2, 0.9],   // zoom detected
-      [0.58, 0.0, 9.5, 0.2, 0.0],   // data — top-down field
-      [0.74, 0.0, 7.0, 3.0, 0.0],   // matching — high angle over field
-      [0.90, 0.5, 1.1, 5.5, 0.9],   // cta — player restored
-      [1.00, 0.4, 1.0, 5.0, 0.9],
+      [0.00, -46, 44, 72, 2, -3, -6],   // hero — high cinematic broadcast, full pitch
+      [0.08, -30, 38, 66, 0, -2, -6],
+      [0.25, 0, 74, 34, 0, 0, 0],       // problem — high crane, all players
+      [0.42, hp[0] + 13, 9, hp[1] + 16, hp[0], 2, hp[1]], // detection — dive to player
+      [0.58, 0, 84, 0.1, 0, 0, 0],      // data — top-down tactical
+      [0.75, 0, 50, 50, 0, 0, 0],       // matching — high angle
+      [0.92, hp[0] + 11, 6, hp[1] + 18, hp[0], 3, hp[1]], // cta — near lit player
+      [1.00, hp[0] + 9, 6, hp[1] + 16, hp[0], 2.5, hp[1]],
     ];
     let a = K[0], b = K[K.length - 1];
-    for (let i = 0; i < K.length - 1; i++) {
-      if (p >= K[i][0] && p <= K[i + 1][0]) { a = K[i]; b = K[i + 1]; break; }
-    }
-    const span = (b[0] - a[0]) || 1;
-    let t = (p - a[0]) / span;
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    t = t * t * (3 - 2 * t); // smoothstep
-    return {
-      x: a[1] + (b[1] - a[1]) * t,
-      y: a[2] + (b[2] - a[2]) * t,
-      z: a[3] + (b[3] - a[3]) * t,
-      ly: a[4] + (b[4] - a[4]) * t,
-    };
+    for (let i = 0; i < K.length - 1; i++) if (p >= K[i][0] && p <= K[i + 1][0]) { a = K[i]; b = K[i + 1]; break; }
+    const s = (b[0] - a[0]) || 1; let t = (p - a[0]) / s; t = t < 0 ? 0 : t > 1 ? 1 : t; t = t * t * (3 - 2 * t);
+    const L = (i) => a[i] + (b[i] - a[i]) * t;
+    return { px: L(1), py: L(2), pz: L(3), lx: L(4), ly: L(5), lz: L(6) };
   }
+
+  setChapter() {} // chapters handled in DOM; scene stays the stadium
 
   _onResize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = innerWidth, h = innerHeight;
     this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-    this.dpr = Math.min(window.devicePixelRatio, this._isMobile() ? 1.25 : 1.5);
-    this.renderer.setPixelRatio(this.dpr);
-    if (this.uniforms) this.uniforms.uPixelRatio.value = this.dpr;
+    this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    this.dpr = Math.min(devicePixelRatio, this._mobile ? 1.25 : 1.5); this.renderer.setPixelRatio(this.dpr);
   }
-
   start() { if (!this._raf) this._loop(); }
   pause() { if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; } }
+  _loop() { this._raf = requestAnimationFrame(() => this._loop()); this.update(Math.min(this._clock.getDelta(), 0.05)); this.renderer.render(this.scene, this.camera); }
 
-  _loop() {
-    this._raf = requestAnimationFrame(() => this._loop());
-    const dt = Math.min(this._clock.getDelta(), 0.05);
-    this.update(dt);
-    this.renderer.render(this.scene, this.camera);
-  }
+  _lerpO(op, target, dt) { return op + (target - op) * Math.min(1, dt * 3); }
 
   update(dt) {
     const p = this.state.progress;
-    const u = this.uniforms;
-    u.uTime.value += dt;
-
-    // reveal fade-in
-    u.uReveal.value += (1 - u.uReveal.value) * Math.min(1, dt * 2.5);
-
-    // morph cloud->field ramps through the data act (~0.5..0.66)
-    const morph = smoothRange(p, 0.5, 0.64);
-    u.uMorph.value += (morph - u.uMorph.value) * Math.min(1, dt * 3);
-
-    // field lines opacity in data + matching
-    const fieldOp = smoothRange(p, 0.5, 0.6) * (1 - smoothRange(p, 0.82, 0.9));
-    this.fieldMat.opacity += (fieldOp * 0.5 - this.fieldMat.opacity) * Math.min(1, dt * 3);
-
-    // matching filter: visible fraction 1 -> 0.02 during matching act (~0.66..0.8)
-    const filt = 1 - smoothRange(p, 0.68, 0.8) * 0.98;
-    u.uVisible.value += (filt - u.uVisible.value) * Math.min(1, dt * 3);
-
-    // bounding box appears during detection (~0.36..0.46), fades after
-    const boxOp = smoothRange(p, 0.36, 0.42) * (1 - smoothRange(p, 0.48, 0.56));
-    this.boxMat.opacity += (boxOp * 0.9 - this.boxMat.opacity) * Math.min(1, dt * 4);
-    this.boxMat2.opacity += (boxOp * 0.5 - this.boxMat2.opacity) * Math.min(1, dt * 4);
-    if (boxOp > 0.01) {
-      this.box.rotation.y += dt * 0.2;
-      this.box2.rotation.y -= dt * 0.15;
-    }
+    // ball spin + gentle bob
+    this.ball.rotation.y += dt * 0.8; this.ball.rotation.x += dt * 0.3;
+    this.ball.position.y = 1.15 + Math.sin(this._clock.elapsedTime * 1.5) * 0.15;
+    this.ball.visible = p < 0.2 || p > 0.85;
+    // floodlight flicker (subtle)
+    // detection reveals
+    const detect = sr(p, 0.36, 0.44) * (1 - sr(p, 0.52, 0.6));
+    this.trackBox.material.opacity = this._lerpO(this.trackBox.material.opacity, detect, dt);
+    this.trackHalo.material.opacity = this._lerpO(this.trackHalo.material.opacity, detect * 0.8, dt);
+    this.trackBox.rotation.y += dt * 0.4;
+    this.trackHalo.scale.setScalar(1 + Math.sin(this._clock.elapsedTime * 3) * 0.05);
+    // data trails
+    const data = sr(p, 0.52, 0.62) * (1 - sr(p, 0.7, 0.78));
+    this.trailMat.opacity = this._lerpO(this.trailMat.opacity, data * 0.85, dt);
+    // matching radar sweep
+    const match = sr(p, 0.68, 0.78);
+    this.radar.material.opacity = this._lerpO(this.radar.material.opacity, match * (1 - sr(p, 0.82, 0.88)) * 0.7, dt);
+    const rs = 2 + ((this._clock.elapsedTime * 12) % 46);
+    this.radar.scale.setScalar(match > 0.02 ? rs : 1);
+    this.radar.material.opacity *= match > 0.02 ? Math.max(0, 1 - rs / 50) : 1;
 
     // camera
-    const cam = this.reducedMotion ? this._cameraFor(0) : this._cameraFor(p);
-    const l = this.reducedMotion ? 1 : Math.min(1, dt * 2.4);
-    this.camera.position.x += (cam.x - this.camera.position.x) * l;
-    this.camera.position.y += (cam.y - this.camera.position.y) * l;
-    this.camera.position.z += (cam.z - this.camera.position.z) * l;
-    this._lookY = (this._lookY ?? cam.ly) + (cam.ly - (this._lookY ?? cam.ly)) * l;
-    this.camera.lookAt(0, this._lookY, this.uniforms.uMorph.value > 0.5 ? 0 : 0);
+    const c = this.reducedMotion ? this._camFor(0) : this._camFor(p);
+    const l = this.reducedMotion ? 1 : Math.min(1, dt * 2.2);
+    this.camera.position.x += (c.px - this.camera.position.x) * l;
+    this.camera.position.y += (c.py - this.camera.position.y) * l;
+    this.camera.position.z += (c.pz - this.camera.position.z) * l;
+    this._lx = (this._lx ?? c.lx) + (c.lx - (this._lx ?? c.lx)) * l;
+    this._ly = (this._ly ?? c.ly) + (c.ly - (this._ly ?? c.ly)) * l;
+    this._lz = (this._lz ?? c.lz) + (c.lz - (this._lz ?? c.lz)) * l;
+    this.camera.lookAt(this._lx, this._ly, this._lz);
   }
 
   dispose() {
     this.pause();
-    this.points.geometry.dispose();
-    this.pointsMat.dispose();
-    this.box.geometry.dispose(); this.boxMat.dispose();
-    this.box2.geometry.dispose(); this.boxMat2.dispose();
-    this.field.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-    this.fieldMat.dispose();
+    this.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { const m = o.material; (Array.isArray(m) ? m : [m]).forEach((x) => { if (x.map) x.map.dispose(); x.dispose && x.dispose(); }); } });
     this.renderer.dispose();
   }
 }
 
-function smoothRange(x, a, b) {
-  if (b === a) return x >= b ? 1 : 0;
-  let t = (x - a) / (b - a);
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  return t * t * (3 - 2 * t);
-}
+function sr(x, a, b) { if (b === a) return x >= b ? 1 : 0; let t = (x - a) / (b - a); t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
