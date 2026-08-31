@@ -3,34 +3,392 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>iSCOUT - Infraestrutura de Scouting para Futebol de Base</title>
-    <meta name="description" content="Infraestrutura de scouting para futebol de base que acelera a descoberta de talentos e democratiza avaliações técnicas com qualidade e precisão.">
+    <title>iSCOUT — Infraestrutura de Scouting para Futebol de Base</title>
+    <meta name="description" content="Infraestrutura de scouting para futebol de base que acelera a descoberta de talentos e democratiza avaliações técnicas com qualidade e precisão." />
     <meta name="author" content="iSCOUT" />
+    <meta name="theme-color" content="#04101F" />
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://iscout.tech" />
     <meta property="og:site_name" content="iSCOUT" />
-    
-    
-    <meta property="og:image" content="/og-image.png">
-
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:title" content="iSCOUT — Infraestrutura de Scouting para Futebol de Base" />
+    <meta property="og:description" content="Do vídeo à decisão. Infraestrutura de scouting para futebol de base que acelera a descoberta de talentos com qualidade e precisão." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="/og-image.png">
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:title" content="iSCOUT — Infraestrutura de Scouting para Futebol de Base" />
+    <meta name="twitter:description" content="Do vídeo à decisão. Infraestrutura de scouting para futebol de base." />
 
-    <link rel="icon" type="image/webp" href="/favicon.webp">
-    <link rel="icon" type="image/png" href="/favicon.png">
-    <meta property="og:title" content="iSCOUT - Infraestrutura de Scouting para Futebol de Base">
-    <meta property="og:description" content="Infraestrutura de scouting para futebol de base que acelera a descoberta de talentos e democratiza avaliações técnicas com qualidade e precisão.">
-    <meta name="twitter:title" content="iSCOUT - Infraestrutura de Scouting para Futebol de Base">
-    <meta name="twitter:description" content="Infraestrutura de scouting para futebol de base que acelera a descoberta de talentos e democratiza avaliações técnicas com qualidade e precisão.">
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="canonical" href="https://iscout.tech" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@100;200;300;400;500;600;700;800&display=swap" rel="stylesheet">
-</head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "iSCOUT",
+        "url": "https://iscout.tech",
+        "description": "Infraestrutura de scouting para futebol de base.",
+        "email": "contato@iscout.tech",
+        "sameAs": []
+      }
+    </script>
+  </head>
 
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <!-- Persistent WebGL layer -->
+    <canvas id="webgl" aria-hidden="true"></canvas>
+    <div id="grain" aria-hidden="true"></div>
+
+    <!-- Skip link (a11y) -->
+    <a class="skip-link" href="#main">Pular para o conteúdo</a>
+
+    <!-- Loader -->
+    <div id="loader" aria-hidden="true">
+      <div class="loader__inner">
+        <span class="loader__count" data-count>00</span>
+        <span class="loader__label">PROCESSING</span>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header class="site-header" id="site-header">
+      <a class="site-header__logo" href="#hero" aria-label="iSCOUT — início">
+        <img src="/assets/iscout-logo-branca.png" alt="iSCOUT" width="112" height="28" />
+      </a>
+      <nav class="site-header__nav" aria-label="Navegação principal">
+        <a href="#problema">O Desafio</a>
+        <a href="#descoberta">Infraestrutura</a>
+        <a href="#como-funciona">Como Funciona</a>
+        <a href="#faq">FAQ</a>
+        <a href="#parceiros">Parcerias</a>
+      </nav>
+      <div class="site-header__actions">
+        <button class="lang-toggle" data-lang-toggle aria-label="Alternar idioma">PT<span>/</span><span class="lang-toggle__alt">EN</span></button>
+        <button class="btn btn--lime" data-open-contact>Agendar Demo</button>
+      </div>
+      <button class="site-header__burger" data-burger aria-label="Menu" aria-expanded="false">
+        <span></span><span></span>
+      </button>
+    </header>
+
+    <main id="main">
+      <!-- ================= ACT I — HERO / INVISIBLE ================= -->
+      <section class="act act--hero" id="hero" data-act="hero" data-bg="dark">
+        <div class="hero__inner grid">
+          <p class="eyebrow" data-reveal>Infraestrutura de scouting · futebol de base</p>
+          <h1 class="hero__title">
+            <span class="line" data-reveal-line>Nenhum talento</span>
+            <span class="line line--accent" data-reveal-line>jogando no escuro.</span>
+          </h1>
+          <p class="hero__desc" data-reveal>
+            Infraestrutura de scouting que acelera a descoberta de novos talentos e
+            democratiza avaliações técnicas com <strong>qualidade e precisão.</strong>
+          </p>
+          <div class="hero__actions" data-reveal>
+            <button class="btn btn--lime" data-open-contact>Agendar Demo <span class="btn__arrow">→</span></button>
+            <a class="btn btn--ghost" href="#como-funciona">Ver como funciona</a>
+          </div>
+          <p class="hero__trust" data-reveal>Para clubes, escolinhas e scouts • Atletas e famílias amplificam a descoberta • Reuniões mediante qualificação</p>
+        </div>
+        <div class="hero__scroll" aria-hidden="true"><span></span>SCROLL</div>
+      </section>
+
+      <!-- ================= ACT II — PROBLEM / VISIBILITY ================= -->
+      <section class="act act--problem" id="problema" data-act="problem" data-bg="dark">
+        <div class="act__pin">
+          <div class="problem__stage grid">
+            <p class="section-tag" data-reveal>⚠️ O Desafio</p>
+            <h2 class="problem__title" data-reveal>
+              O problema não é falta de talento.
+            </h2>
+            <p class="problem__giant" data-reveal-line aria-hidden="true">VISIBILIDADE</p>
+            <p class="sr-only">É visibilidade.</p>
+            <p class="problem__desc" data-reveal>
+              Descobrir talentos ainda depende de cobertura limitada, critérios inconsistentes
+              e muito vídeo sem estrutura. Clubes avaliam menos atletas do que poderiam — e
+              famílias seguem sem visibilidade real.
+            </p>
+            <p class="problem__stat" data-reveal>
+              O mercado brasileiro movimentou <strong>R$ 10 bilhões</strong> em transferências
+              nos últimos 8 anos. <span>Quanto desse valor está ficando na mesa?</span>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ACT III — DISCOVERY / PIPELINE ================= -->
+      <section class="act act--pipeline" id="descoberta" data-act="pipeline" data-bg="dark">
+        <div class="act__pin">
+          <div class="pipeline__stage grid">
+            <p class="section-tag" data-reveal>⚡ Detecção</p>
+            <h2 class="pipeline__title">
+              <span class="line" data-reveal-line>O</span>
+              <span class="line line--accent" data-reveal-line>iSCOUT</span>
+              <span class="line" data-reveal-line>muda o jogo.</span>
+            </h2>
+            <ul class="pipeline__steps" aria-label="Do movimento ao dado">
+              <li data-step="0"><span class="pipeline__num">01</span> RAW FOOTAGE</li>
+              <li data-step="1"><span class="pipeline__num">02</span> PLAYER DETECTION</li>
+              <li data-step="2"><span class="pipeline__num">03</span> TRACKING</li>
+              <li data-step="3"><span class="pipeline__num">04</span> EVENT RECOGNITION</li>
+              <li data-step="4"><span class="pipeline__num">05</span> STRUCTURED DATA</li>
+            </ul>
+            <p class="pipeline__kinetic" aria-hidden="true">
+              <span data-kinetic>VÍDEO</span>
+              <span data-kinetic>VISÃO</span>
+              <span data-kinetic>DADOS</span>
+              <span data-kinetic>DECISÃO</span>
+            </p>
+          </div>
+          <!-- Tracking overlay (DOM, cinematographic / illustrative) -->
+          <div class="tracking-hud" data-hud aria-hidden="true">
+            <span class="tracking-hud__tag">PLAYER 07</span>
+            <span class="tracking-hud__row">TRACKING <b data-hud-status>—</b></span>
+            <span class="tracking-hud__row">POS <b data-hud-pos>x0.00 / y0.00</b></span>
+            <span class="tracking-hud__row">CONF <b data-hud-conf>0.00</b></span>
+            <span class="tracking-hud__note">Dados ilustrativos</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ACT IV — DATA / PROFILE ================= -->
+      <section class="act act--data" id="dados" data-act="data" data-bg="light">
+        <div class="act__pin">
+          <div class="data__stage grid">
+            <p class="section-tag" data-reveal>📈 Do movimento ao dado</p>
+            <h2 class="data__title" data-reveal>O jogo <em>vira dado.</em></h2>
+            <p class="data__desc" data-reveal>
+              A mesma cena evolui: o atleta em campo se transforma em um node de dados.
+              Vídeo, contexto e leitura técnica no mesmo fluxo — decisão humana com base em
+              evidência, não impressão.
+            </p>
+            <!-- Scenographic player profile -->
+            <article class="profile-card" data-reveal aria-label="Perfil de atleta (dados ilustrativos)">
+              <header class="profile-card__head">
+                <span class="profile-card__num">07</span>
+                <div>
+                  <span class="profile-card__name">PLAYER PROFILE</span>
+                  <span class="profile-card__meta">Dados cenográficos · ilustrativos</span>
+                </div>
+              </header>
+              <dl class="profile-card__grid">
+                <div><dt>POSIÇÃO</dt><dd>WINGER</dd></div>
+                <div><dt>IDADE</dt><dd>17</dd></div>
+                <div><dt>PÉ</dt><dd>DIREITO</dd></div>
+                <div><dt>JOGOS</dt><dd>12</dd></div>
+              </dl>
+              <ul class="profile-card__bars">
+                <li><span>PROGRESSÃO</span><i style="--v:82%"></i></li>
+                <li><span>1V1</span><i style="--v:74%"></i></li>
+                <li><span>INTENSIDADE</span><i style="--v:91%"></i></li>
+                <li><span>DECISÃO</span><i style="--v:68%"></i></li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ACT V — MATCHING / HUMAN + AI ================= -->
+      <section class="act act--matching" id="matching" data-act="matching" data-bg="dark">
+        <div class="act__pin">
+          <div class="matching__stage grid">
+            <p class="section-tag" data-reveal>🎯 Descoberta</p>
+            <h2 class="matching__title" data-reveal>
+              O jogador que você procura <em>pode já estar lá.</em>
+            </h2>
+            <div class="matching__filters" data-reveal>
+              <span>LATERAL</span><span>SUB-17</span><span>FAST</span>
+              <span>HIGH INTENSITY</span><span>1V1</span><span>PROGRESSION</span>
+            </div>
+            <p class="matching__count" aria-hidden="true"><b data-match-count>300</b><span>nodes</span></p>
+            <p class="matching__human" data-reveal>
+              Não substitui quem entende do jogo. <em>Amplifica.</em>
+              <span>A IA organiza, prioriza e encontra padrões. O scout contextualiza, interpreta e decide.</span>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= HOW IT WORKS (DOM) ================= -->
+      <section class="section section--how" id="como-funciona" data-bg="light">
+        <div class="grid">
+          <p class="section-tag" data-reveal>🔧 Como Funciona</p>
+          <h2 class="section__title" data-reveal>Da captura do vídeo até a decisão em <em>7 etapas</em></h2>
+          <ol class="steps" data-stagger>
+            <li><span class="steps__n">01</span><h3>Conecte suas fontes de vídeo</h3><p>Celular, GoPro, drones ou câmeras profissionais. Qualquer dispositivo que grave é compatível.</p></li>
+            <li><span class="steps__n">02</span><h3>Filme jogos e treinos</h3><p>Capture a performance completa. Não precisa editar: a plataforma processa o material bruto.</p></li>
+            <li><span class="steps__n">03</span><h3>Faça upload seguro</h3><p>Direto pelo app ou dashboard. Criptografia de ponta a ponta protege seus dados estratégicos.</p></li>
+            <li><span class="steps__n">04</span><h3>Compressão inteligente</h3><p>Reduza arquivo em até 98% mantendo qualidade visual. Tecnologia proprietária.</p></li>
+            <li><span class="steps__n">05</span><h3>Armazenamento otimizado</h3><p>Nuvem segura com custo otimizado. Acesso instantâneo de qualquer lugar.</p></li>
+            <li><span class="steps__n">06</span><h3>Análise com critérios claros</h3><p>Aspectos motores, táticos, técnicos e comportamentais avaliados com consistência.</p></li>
+            <li><span class="steps__n">07</span><h3>Relatórios + insights acionáveis</h3><p>Classificação automática, ranking objetivo e benchmarks históricos.</p></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ================= FOR WHO (DOM) ================= -->
+      <section class="section section--audiences" id="para-quem" data-bg="light">
+        <div class="grid">
+          <p class="section-tag" data-reveal>🎯 Para Você</p>
+          <h2 class="section__title" data-reveal>Quem precisa decidir melhor com o <em>iSCOUT</em></h2>
+          <div class="cards cards--4" data-stagger>
+            <article class="card"><span class="card__emoji">⚽</span><h3>Clubes e escolinhas</h3><p>Avalie mais atletas com menos recursos e com critérios claros.</p><p class="card__foot">Tecnologia que amplia o olhar humano — não o substitui.</p></article>
+            <article class="card"><span class="card__emoji">🤝</span><h3>Scouts e treinadores</h3><p>Compare jogadores com mais consistência e menos subjetividade.</p><p class="card__foot">Decisão humana com base em evidência, não impressão.</p></article>
+            <article class="card"><span class="card__emoji">📈</span><h3>Empresários FIFA & scouts</h3><p>Ganhe visibilidade com mais estrutura e menos promessa.</p><p class="card__foot">Profissionalize seu trabalho com plataforma especializada.</p></article>
+            <article class="card"><span class="card__emoji">🏫</span><h3>Atletas e escolinhas</h3><p>Organize vídeos, evolução e contexto para entrar melhor no radar.</p><p class="card__foot">Visibilidade com mais estrutura e menos promessa.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ADVANTAGES (DOM) ================= -->
+      <section class="section section--advantages" id="vantagens" data-bg="dark">
+        <div class="grid">
+          <p class="section-tag" data-reveal>🧱 Diferenciais</p>
+          <h2 class="section__title" data-reveal>Onde o <em>iSCOUT</em> vence a concorrência</h2>
+          <div class="cards cards--3" data-stagger>
+            <article class="card card--min"><h3>Base de dados em crescimento</h3><p>Cada vídeo estruturado fortalece a inteligência da plataforma.</p></article>
+            <article class="card card--min"><h3>Plataforma especializada</h3><p>Futebol de base pede fluxo próprio: vídeo, contexto e avaliação conectados.</p></article>
+            <article class="card card--min"><h3>Avaliação estruturada</h3><p>Critérios consistentes entre atletas, posições e categorias.</p></article>
+            <article class="card card--min"><h3>Decisão humana com evidência</h3><p>Apoia quem decide. Não substitui o scout, o treinador ou o clube.</p></article>
+            <article class="card card--min"><h3>Operação integrada de vídeo</h3><p>Material bruto vira inteligência quando o contexto é recuperável.</p></article>
+            <article class="card card--min"><h3>Governança e privacidade</h3><p>Proteção de dados e autorização são parte da infraestrutura.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= PARTNERS (DOM) ================= -->
+      <section class="section section--partners" id="parceiros" data-bg="light">
+        <div class="grid">
+          <p class="section-tag" data-reveal>🤝 Parceiros e Investidores</p>
+          <h2 class="section__title" data-reveal>Construindo mercado com o <em>iSCOUT</em></h2>
+          <p class="section__lead" data-reveal>Mostramos publicamente apenas parcerias formalizadas e autorizadas. Logos só aparecem depois de contrato assinado e autorização formal de uso.</p>
+          <div class="cards cards--3" data-stagger>
+            <article class="card card--min"><span class="card__emoji">⚽</span><h3>Clubes e escolinhas</h3><p>Integração comercial e operacional para avaliar mais atletas com estrutura.</p></article>
+            <article class="card card--min"><span class="card__emoji">🏫</span><h3>Tecnologia e dados</h3><p>Parceiros entram quando reforçam o produto e a operação.</p></article>
+            <article class="card card--min"><span class="card__emoji">📡</span><h3>Investidores qualificados</h3><p>Conversas feitas mediante qualificação e materiais específicos.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= FAQ (DOM) ================= -->
+      <section class="section section--faq" id="faq" data-bg="dark">
+        <div class="grid">
+          <p class="section-tag" data-reveal>❓ FAQ</p>
+          <h2 class="section__title" data-reveal>Perguntas <em>frequentes</em></h2>
+          <div class="faq" data-stagger>
+            <details><summary>Como o sistema funciona na prática?</summary><p>Em 7 etapas: você filma com qualquer câmera, faz upload, comprimimos o vídeo em até 98% mantendo qualidade, armazenamos em nuvem, organizamos com critérios consistentes e geramos relatórios em fluxo estruturado.</p></details>
+            <details><summary>Preciso de câmeras profissionais ou posso usar celular?</summary><p>Qualquer dispositivo que grave: celular, GoPro, drone ou câmera profissional. Um celular moderno já entrega resultados consistentes.</p></details>
+            <details><summary>Quanto tempo leva para ter os primeiros resultados?</summary><p>Com 3–5 jogos filmados já conseguimos traçar um perfil técnico consistente do jogador.</p></details>
+            <details><summary>Quanto custa o iSCOUT?</summary><p>Modelos comerciais flexíveis para clubes, escolinhas e scouts. Reuniões são feitas mediante qualificação.</p></details>
+            <details><summary>Meus dados e vídeos estão seguros?</summary><p>Criptografia ponta-a-ponta no upload, armazenamento com certificação ISO 27001, backups automáticos diários e conformidade com LGPD. Você mantém 100% de propriedade dos seus dados.</p></details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ACT VI — FINAL CTA / VISIBLE ================= -->
+      <section class="act act--cta" id="cta-final" data-act="cta" data-bg="dark">
+        <div class="cta__inner grid">
+          <p class="section-tag" data-reveal>🚀 A jornada termina aqui</p>
+          <h2 class="cta__title">
+            <span class="line" data-reveal-line>O talento está</span>
+            <span class="line" data-reveal-line>em todo lugar.</span>
+            <span class="line line--accent" data-reveal-line>A oportunidade, não.</span>
+          </h2>
+          <p class="cta__desc" data-reveal>Infraestrutura de scouting para futebol de base: mais descoberta, mais critério e mais clareza para decidir.</p>
+          <div class="cta__actions" data-reveal>
+            <button class="btn btn--lime btn--lg" data-open-contact>Conheça o iSCOUT <span class="btn__arrow">→</span></button>
+            <a class="btn btn--ghost" href="#como-funciona">Ver como funciona</a>
+          </div>
+          <p class="cta__trust" data-reveal>Reuniões mediante qualificação • Materiais institucionais sob demanda</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer" data-bg="dark">
+      <div class="grid site-footer__grid">
+        <div class="site-footer__brand">
+          <img src="/assets/iscout-logo-branca.png" alt="iSCOUT" width="120" height="30" />
+          <p>Infraestrutura de scouting que organiza vídeo, contexto e avaliação técnica para descoberta com critério.</p>
+          <p class="site-footer__cnpj">CNPJ 10.538.909/0001-51</p>
+        </div>
+        <nav class="site-footer__col" aria-label="Contato">
+          <h3>Contato</h3>
+          <a href="mailto:contato@iscout.tech">contato@iscout.tech</a>
+          <a href="mailto:parcerias@iscout.tech">parcerias@iscout.tech</a>
+          <a href="mailto:suporte@iscout.tech">suporte@iscout.tech</a>
+        </nav>
+        <nav class="site-footer__col" aria-label="Legal">
+          <h3>Legal</h3>
+          <a href="#" data-open-legal="privacy">Política de privacidade</a>
+          <a href="#" data-open-legal="terms">Termos de serviço</a>
+        </nav>
+        <div class="site-footer__col">
+          <h3>Falar agora</h3>
+          <button class="btn btn--lime" data-open-contact>Agendar Demo</button>
+        </div>
+      </div>
+      <div class="grid site-footer__base">
+        <span>© 2025 iSCOUT. Todos os direitos reservados.</span>
+        <span>Desenvolvido com 💚 para revelar talentos que mudam o jogo.</span>
+      </div>
+    </footer>
+
+    <!-- Contact dialog -->
+    <dialog id="contact-dialog" class="dialog" aria-label="Fale com a iSCOUT">
+      <button class="dialog__close" data-close-contact aria-label="Fechar">✕</button>
+      <h2 class="dialog__title">Fale com a iSCOUT</h2>
+      <p class="dialog__sub">Preencha o formulário e retornaremos em breve.</p>
+      <form id="contact-form" novalidate>
+        <div class="field"><label for="cf-name">Nome</label><input id="cf-name" name="name" required maxlength="120" /></div>
+        <div class="field"><label for="cf-email">E-mail</label><input id="cf-email" name="email" type="email" required /></div>
+        <div class="field-row">
+          <div class="field"><label for="cf-phone">Telefone</label><input id="cf-phone" name="phone" required /></div>
+          <div class="field"><label for="cf-state">Estado</label><input id="cf-state" name="state" required maxlength="60" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="cf-role">Sou</label>
+            <select id="cf-role" name="role" required>
+              <option value="">Selecione</option>
+              <option value="dirigente">Dirigente de escolinha</option>
+              <option value="treinador">Treinador</option>
+              <option value="investidor">Investidor</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+          <div class="field"><label for="cf-reason">Motivo</label>
+            <select id="cf-reason" name="reason" required>
+              <option value="">Selecione</option>
+              <option value="demonstracao">Demonstração</option>
+              <option value="parcerias">Parcerias</option>
+              <option value="duvidas">Dúvidas</option>
+              <option value="suporte">Suporte</option>
+            </select>
+          </div>
+        </div>
+        <div class="field field--other" hidden><label for="cf-role-other">Qual?</label><input id="cf-role-other" name="role_other" maxlength="120" /></div>
+        <div class="field"><label for="cf-message">Mensagem</label><textarea id="cf-message" name="message" required maxlength="2000" rows="3"></textarea></div>
+        <!-- honeypot -->
+        <input type="text" name="company" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
+        <label class="field-check"><input type="checkbox" required /> Li e aceito a <a href="#" data-open-legal="privacy">Política de Privacidade</a>.</label>
+        <div id="cf-captcha"></div>
+        <button type="submit" class="btn btn--lime btn--block">Enviar</button>
+        <p class="cf-status" data-cf-status role="status" aria-live="polite"></p>
+        <p class="cf-alt">Parcerias com urgência? <a href="https://wa.me/5511976526105" target="_blank" rel="noopener">WhatsApp +55 11 97652-6105</a></p>
+      </form>
+    </dialog>
+
+    <!-- Legal dialog -->
+    <dialog id="legal-dialog" class="dialog dialog--legal" aria-label="Documento legal">
+      <button class="dialog__close" data-close-legal aria-label="Fechar">✕</button>
+      <div data-legal-content></div>
+    </dialog>
+
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
