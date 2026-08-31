@@ -1,0 +1,63 @@
+:root {
+  /* Brand palette (extracted) */
+  --navy: #0a1b33;
+  --navy-darker: #04101f;
+  --navy-card: #0e2238;
+  --cyan: #47c6ff;
+  --blue: #3d6bff;
+  --lime: #a8db37;
+  --green: #8cc42e;
+  --offwhite: #f2f5f4;
+  --white: #ffffff;
+  --danger: #ff4d5e;
+
+  /* Semantic — dark chapter (default) */
+  --bg: var(--navy-darker);
+  --bg-elev: var(--navy-card);
+  --fg: var(--offwhite);
+  --fg-dim: rgba(242, 245, 244, 0.62);
+  --fg-faint: rgba(242, 245, 244, 0.34);
+  --line: rgba(242, 245, 244, 0.12);
+  --accent: var(--cyan);
+  --accent-2: var(--lime);
+
+  /* Type scale (fluid) */
+  --step--1: clamp(0.78rem, 0.74rem + 0.2vw, 0.9rem);
+  --step-0: clamp(0.95rem, 0.9rem + 0.3vw, 1.1rem);
+  --step-1: clamp(1.2rem, 1rem + 0.9vw, 1.6rem);
+  --step-2: clamp(1.6rem, 1.2rem + 1.8vw, 2.6rem);
+  --step-3: clamp(2.2rem, 1.4rem + 3.6vw, 4rem);
+  --step-4: clamp(3rem, 1.4rem + 7vw, 7rem);
+  --step-giant: clamp(3.4rem, 0.5rem + 14vw, 15rem);
+
+  /* Spacing */
+  --gutter: clamp(1.2rem, 0.6rem + 2.4vw, 2.6rem);
+  --section-y: clamp(5rem, 3rem + 8vw, 11rem);
+  --maxw: 1400px;
+
+  /* Motion */
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 0.7s;
+
+  /* z-index */
+  --z-canvas: 0;
+  --z-content: 2;
+  --z-header: 30;
+  --z-dialog: 60;
+  --z-loader: 90;
+
+  --font: 'Sora', system-ui, -apple-system, sans-serif;
+}
+
+/* Light chapter */
+:root[data-chapter='light'] {
+  --bg: var(--offwhite);
+  --bg-elev: #ffffff;
+  --fg: #0b1c30;
+  --fg-dim: rgba(11, 28, 48, 0.6);
+  --fg-faint: rgba(11, 28, 48, 0.32);
+  --line: rgba(11, 28, 48, 0.12);
+  --accent: var(--blue);
+  --accent-2: var(--green);
+}
